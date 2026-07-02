@@ -182,9 +182,9 @@ const App = {
 
       let alertsHtml = '';
       if (alerts && alerts.length > 0) {
-        alertsHtml = alerts.slice(0, 3).map(a => {
+        alertsHtml = alerts.slice(0, 3).map((a, idx) => {
           const lvl = a.level === 'danger' ? 'danger' : a.level === 'warning' ? 'warning' : a.level === 'info' ? 'info' : 'success';
-          return `<div class="alert alert-${lvl}"><strong>${a.title}</strong><br>${a.message}</div>`;
+          return `<div class="alert alert-${lvl}" style="cursor:pointer;" onclick="App.showAlertDetail(${idx})"><strong>${a.title}</strong><br>${a.message}</div>`;
         }).join('');
       } else {
         alertsHtml = '<div class="alert alert-success">✅ 当前无预警</div>';
@@ -441,14 +441,27 @@ const App = {
       return `
         <div class="card">
           <div class="card-title">📊 检查数据 <button class="btn btn-primary btn-sm" onclick="App.go('/add-test')">+录入</button></div>
-          <div style="font-size:13px;color:#888;">共 ${sorted.length} 次记录</div>
-          ${sorted.length ? sorted.slice(0, 5).map(r => `<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
-            <div style="display:flex;justify-content:space-between;font-size:13px;"><strong>${r.date}</strong> <span style="color:var(--text-light);">${r.hospital||''} <span style="color:var(--red);cursor:pointer;" onclick="App.deleteTestRecord('${r.id}')">删</span></span></div>
-            ${r.urinaryCopper24h !== null && r.urinaryCopper24h !== undefined ? `<div style="font-size:12px;">24h尿铜：<strong>${r.urinaryCopper24h}</strong> μg/24h</div>` : ''}
-            ${r.ceruloplasmin ? `<div style="font-size:12px;">铜蓝蛋白：<strong>${r.ceruloplasmin}</strong> g/L</div>` : ''}
-            ${r.alt ? `<div style="font-size:12px;">ALT：<strong>${r.alt}</strong> U/L</div>` : ''}
-            ${r.serumCalcium ? `<div style="font-size:12px;">血钙：<strong>${r.serumCalcium}</strong> mmol/L</div>` : ''}
-          </div>`).join('') : '<div class="empty-state"><div class="empty-icon">📋</div><div>暂无检查记录</div></div>'}
+          <div style="font-size:13px;color:#888;">共 ${sorted.length} 次记录 · 点击详情查看全部指标</div>
+          ${sorted.length ? sorted.map(r => {
+            // 收集有值的指标
+            const values = [];
+            if (r.urinaryCopper24h) values.push(`24h尿铜:${r.urinaryCopper24h}`);
+            if (r.ceruloplasmin) values.push(`铜蓝蛋白:${r.ceruloplasmin}`);
+            if (r.alt) values.push(`ALT:${r.alt}`);
+            if (r.ast) values.push(`AST:${r.ast}`);
+            if (r.serumCalcium) values.push(`血钙:${r.serumCalcium}`);
+            if (r.wbc) values.push(`WBC:${r.wbc}`);
+            if (r.hemoglobin) values.push(`HGB:${r.hemoglobin}`);
+            if (r.tbil) values.push(`TBIL:${r.tbil}`);
+            if (r.serumZinc) values.push(`血锌:${r.serumZinc}`);
+            const ab = r.abnormals && r.abnormals.length ? r.abnormals.length : 0;
+            return `<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;cursor:pointer;" onclick="App.viewTestDetail('${r.id}')">
+              <div style="display:flex;justify-content:space-between;font-size:13px;">
+                <strong>${r.date}</strong> <span style="color:var(--text-light);">${r.hospital||''} ${ab>0?`<span class="tag tag-red">${ab}项异常</span>`:''}</span>
+              </div>
+              <div style="font-size:12px;color:#666;margin-top:2px;">${values.slice(0,5).join(' · ')}${values.length>5?` · +${values.length-5}项`:''}</div>
+            </div>`;
+          }).join('') : '<div class="empty-state"><div class="empty-icon">📋</div><div>暂无检查记录</div></div>'}
         </div>
         ${sorted.length > 0 ? `
         <div class="card"><div class="card-title">📈 24h尿铜趋势</div><div style="height:160px;"><canvas id="chart_uc"></canvas></div></div>
@@ -457,6 +470,38 @@ const App = {
         <script>setTimeout(() => App.loadCharts(), 200);<\/script>` : ''}
       `;
     } catch(e) { return `<div class="alert alert-danger">${e.message}</div>`; }
+  },
+
+  async viewTestDetail(id) {
+    try {
+      const records = await API.getTests();
+      const r = records.find(x => x.id === id);
+      if (!r) return;
+      const panel = await API.getTestPanel();
+      const d = document.createElement('div'); d.className = 'modal-overlay';
+      let html = `<div class="modal-content" style="max-width:600px;"><div class="modal-title">📋 ${r.date} 检查详情 ${r.hospital?'('+r.hospital+')':''}</div>`;
+      let hasData = false;
+      for (const [gk, g] of Object.entries(panel)) {
+        let groupHtml = '';
+        for (const item of g.items) {
+          const val = r[item.key];
+          if (val === null || val === undefined || val === '') continue;
+          hasData = true;
+          const isAbnormal = item.normalLow !== null && item.normalHigh !== null && !item.isText && !item.isQualitative && (val < item.normalLow || val > item.normalHigh);
+          const color = isAbnormal ? 'var(--red)' : 'var(--green)';
+          const mark = isAbnormal ? ' 🔴' : '';
+          groupHtml += `<div class="test-item"><span class="test-name">${item.label}${mark}</span><span class="test-value" style="color:${color}">${val}</span><span class="test-unit">${item.unit||''}</span></div>`;
+        }
+        if (groupHtml) {
+          html += `<div style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;padding:4px 0;background:#f8f9ff;border-radius:4px;padding:4px 8px;">${g.label}</div>${groupHtml}</div>`;
+        }
+      }
+      if (!hasData) html += '<div style="text-align:center;padding:20px;color:#888;">该次检查未录入具体指标数据</div>';
+      html += `<button class="btn btn-outline btn-block" onclick="this.closest('.modal-overlay').remove()">关闭</button></div>`;
+      d.innerHTML = html;
+      d.onclick = function(e) { if (e.target === this) this.remove(); };
+      document.body.appendChild(d);
+    } catch(e) { alert('获取详情失败'); }
   },
 
   async loadCharts() {
@@ -605,13 +650,39 @@ const App = {
       const { alerts } = await API.getDailyAlerts();
       let h = '';
       if (alerts && alerts.length) {
-        h = alerts.map(a => {
+        h = alerts.map((a, idx) => {
           const l = a.level === 'danger' ? 'danger' : a.level === 'warning' ? 'warning' : 'info';
-          return `<div class="alert alert-${l}"><strong>${a.title}</strong><p>${a.message}</p>${a.emergency ? a.emergency.map(s => `<div style="font-size:12px;">${s.icon} ${s.action}</div>`).join('') : ''}</div>`;
+          return `<div class="alert alert-${l}" style="cursor:pointer;" onclick="App.showAlertDetail('${idx}')">
+            <strong>${a.title}</strong><p>${a.message}</p>
+            ${a.emergency ? a.emergency.slice(0,2).map(s => `<div style="font-size:12px;">${s.icon} ${s.action}</div>`).join('') : ''}
+            ${a.abnormals ? `<div style="font-size:11px;color:var(--red);margin-top:2px;">点击查看${a.abnormals.length}项异常详情</div>` : ''}
+          </div>`;
         }).join('');
       } else h = '<div class="alert alert-success">✅ 无预警</div>';
       return `<div class="card"><div class="card-title">🔔 今日预警</div>${h}</div>`;
     } catch(e) { return `<div class="alert alert-danger">${e.message}</div>`; }
+  },
+
+  async showAlertDetail(idx) {
+    try {
+      const { alerts } = await API.getDailyAlerts();
+      const a = alerts[idx];
+      if (!a) return;
+      const d = document.createElement('div'); d.className = 'modal-overlay';
+      let html = `<div class="modal-content"><div class="modal-title">${a.title}</div><div class="alert alert-${a.level === 'danger' ? 'danger' : 'warning'}">${a.message}</div>`;
+      if (a.emergency) {
+        html += `<div style="font-size:13px;font-weight:600;margin:6px 0;">应急处理步骤：</div>`;
+        html += a.emergency.map(s => `<div style="padding:4px 0;font-size:12px;">${s.icon} ${s.action}</div>`).join('');
+      }
+      if (a.abnormals) {
+        html += `<div style="font-size:13px;font-weight:600;margin:6px 0;">异常指标详情：</div>`;
+        html += a.abnormals.map(ab => `<div class="alert alert-danger" style="font-size:12px;">${ab.label}：${ab.value}（正常范围：${ab.normalRange}）</div>`).join('');
+      }
+      html += `<button class="btn btn-outline btn-block" onclick="this.closest('.modal-overlay').remove()">关闭</button></div>`;
+      d.innerHTML = html;
+      d.onclick = function(e) { if (e.target === this) this.remove(); };
+      document.body.appendChild(d);
+    } catch(e) {}
   },
 
   // ===== 宝宝档案 =====
