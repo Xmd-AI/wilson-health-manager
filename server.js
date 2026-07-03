@@ -48,13 +48,16 @@ function getUserAge(userId) {
 
 // ========== 认证 ==========
 app.post('/api/register', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, securityQuestion, securityAnswer } = req.body;
   if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
+  if (!securityQuestion || !securityAnswer) return res.status(400).json({ error: '请设置安全问题' });
   const existing = db.findUserByUsername(username);
   if (existing) return res.status(400).json({ error: '用户名已存在' });
   const hash = bcrypt.hashSync(password, 10);
   const user = db.createUser(username, hash);
   if (!user) return res.status(500).json({ error: '创建失败' });
+  // 保存安全问题
+  db.setSecurityQuestion(username, securityQuestion, securityAnswer);
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, username: user.username });
 });
@@ -67,6 +70,38 @@ app.post('/api/login', (req, res) => {
   }
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, username: user.username });
+});
+
+// ========== 忘记密码 ==========
+app.post('/api/forgot-password/question', (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: '请输入用户名' });
+  const user = db.findUserByUsername(username);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  if (!user.securityQuestion) return res.status(400).json({ error: '该用户未设置安全问题，无法找回密码' });
+  res.json({ question: user.securityQuestion });
+});
+
+app.post('/api/reset-password', (req, res) => {
+  const { username, securityAnswer, newPassword } = req.body;
+  if (!username || !securityAnswer || !newPassword) return res.status(400).json({ error: '请填写完整' });
+  if (newPassword.length < 6) return res.status(400).json({ error: '密码至少6位' });
+  const user = db.findUserByUsername(username);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  if (user.securityAnswer !== securityAnswer) return res.status(403).json({ error: '安全问题答案错误' });
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.updatePassword(username, hash);
+  res.json({ success: true, message: '密码已重置，请重新登录' });
+});
+
+// 已登录用户设置/修改安全问题
+app.post('/api/profile/security-question', authMiddleware, (req, res) => {
+  const { question, answer } = req.body;
+  if (!question || !answer) return res.status(400).json({ error: '请填写完整' });
+  const user = db.findUserById(req.userId);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  db.setSecurityQuestion(user.username, question, answer);
+  res.json({ success: true });
 });
 
 // ========== 食物数据库 ==========
