@@ -30,7 +30,15 @@ const API = {
 
   // 认证
   login(username, password) { return this.post('/api/login', { username, password }); },
-  register(username, password) { return this.post('/api/register', { username, password }); },
+  register(username, password, securityQuestion, securityAnswer) {
+    return this.post('/api/register', { username, password, securityQuestion, securityAnswer });
+  },
+
+  // 忘记密码
+  getSecurityQuestion(username) { return this.post('/api/forgot-password/question', { username }); },
+  resetPassword(username, securityAnswer, newPassword) {
+    return this.post('/api/reset-password', { username, securityAnswer, newPassword });
+  },
 
   // 食物
   getFoods(category, search) {
@@ -84,5 +92,8 @@ const API = {
   getDailyAlerts() { return this.get('/api/alerts/daily'); },
 
   // 导出
-  exportData() { return this.get('/api/export'); }
+  exportData() { return this.get('/api/export'); },
+
+  // 安全问题设置
+  setSecurityQuestion(question, answer) { return this.post('/api/profile/security-question', { question, answer }); }
 };
