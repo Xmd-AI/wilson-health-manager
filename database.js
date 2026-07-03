@@ -239,11 +239,33 @@ function exportAllData(userId) {
   };
 }
 
+// 密码重置
+function updatePassword(username, newPasswordHash) {
+  const users = getCollection('users');
+  const user = users.find(u => u.username === username);
+  if (!user) return false;
+  user.passwordHash = newPasswordHash;
+  save();
+  return true;
+}
+
+// 设置安全问题（注册时或用户自行设置）
+function setSecurityQuestion(username, question, answer) {
+  const users = getCollection('users');
+  const user = users.find(u => u.username === username);
+  if (!user) return false;
+  user.securityQuestion = question;
+  user.securityAnswer = answer;
+  save();
+  return true;
+}
+
 // 初始化
 load();
 
 module.exports = {
   createUser, findUserByUsername, findUserById,
+  updatePassword, setSecurityQuestion,
   getProfile, saveProfile,
   addDietRecord, getDietRecords, getDietRecordsRange, deleteDietRecord,
   getMedications, saveMedication, deleteMedication,
