@@ -31,6 +31,7 @@ const App = {
     this.routes = {
       '/login': { render: () => this.renderLogin(), title: '登录' },
       '/register': { render: () => this.renderRegister(), title: '注册' },
+      '/forgot-password': { render: () => this.renderForgotPassword(), title: '找回密码' },
       '/dashboard': { render: () => this.renderDashboard(), title: '首页' },
       '/diet': { render: () => this.renderDiet(), title: '饮食管理' },
       '/add-diet': { render: () => this.renderAddDiet(), title: '记录饮食' },
@@ -43,7 +44,7 @@ const App = {
       '/alerts': { render: () => this.renderAlerts(), title: '预警中心' },
       '/referral': { render: () => this.renderReferral(), title: '智能导诊' },
       '/drug-check': { render: () => this.renderDrugCheck(), title: '用药评估' },
-    '/med-adjust': { render: () => this.renderMedAdjust(), title: '用药调整建议' },
+      '/med-adjust': { render: () => this.renderMedAdjust(), title: '用药调整建议' },
     };
   },
 
@@ -101,7 +102,11 @@ const App = {
           </div>
           <div id="loginError" style="color:var(--red);font-size:13px;margin-bottom:8px;display:none;"></div>
           <button class="btn btn-primary btn-block" onclick="App.doLogin()">登 录</button>
-          <div style="text-align:center;margin-top:12px;font-size:13px;">没有账号？<a href="#/register" style="color:#667eea;">立即注册</a></div>
+          <div style="text-align:center;margin-top:12px;font-size:13px;">
+            <a href="#/forgot-password" style="color:#888;">忘记密码？</a>
+            <span style="color:#ddd;margin:0 6px;">|</span>
+            <a href="#/register" style="color:#667eea;">立即注册</a>
+          </div>
         </div>
       </div>
     `;
@@ -125,6 +130,21 @@ const App = {
           <div class="form-group">
             <label class="form-label">确认密码</label>
             <input class="form-input" id="regConfirm" type="password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">安全问题（找回密码用）</label>
+            <select class="form-select" id="regSecurityQuestion">
+              <option value="您的出生地是？">您的出生地是？</option>
+              <option value="您母亲的姓名是？">您母亲的姓名是？</option>
+              <option value="您父亲的姓名是？">您父亲的姓名是？</option>
+              <option value="您的小学名称是？">您的小学名称是？</option>
+              <option value="您宠物的名字是？">您宠物的名字是？</option>
+              <option value="您最喜爱的城市是？">您最喜爱的城市是？</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">安全问题答案</label>
+            <input class="form-input" id="regSecurityAnswer" placeholder="请牢记您的答案">
           </div>
           <div id="regError" style="color:var(--red);font-size:13px;margin-bottom:8px;display:none;"></div>
           <button class="btn btn-primary btn-block" onclick="App.doRegister()">注 册</button>
@@ -153,17 +173,88 @@ const App = {
     const u = document.getElementById('regUsername').value.trim();
     const p = document.getElementById('regPassword').value;
     const c = document.getElementById('regConfirm').value;
+    const sq = document.getElementById('regSecurityQuestion')?.value || '您的出生地是？';
+    const sa = document.getElementById('regSecurityAnswer')?.value.trim() || '';
     const err = document.getElementById('regError');
     if (!u || !p) { err.textContent = '请填写完整'; err.style.display = 'block'; return; }
     if (p.length < 6) { err.textContent = '密码至少6位'; err.style.display = 'block'; return; }
     if (p !== c) { err.textContent = '两次密码不一致'; err.style.display = 'block'; return; }
+    if (!sa) { err.textContent = '请设置安全问题答案'; err.style.display = 'block'; return; }
     try {
-      const res = await API.register(u, p);
+      const res = await API.register(u, p, sq, sa);
       localStorage.setItem('token', res.token);
       localStorage.setItem('username', res.username);
       API.token = res.token;
       this.checkLogin();
       this.route();
+    } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
+  },
+
+  // ===== 找回密码 =====
+  renderForgotPassword() {
+    return `
+      <div style="padding:60px 20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">🔑</div>
+        <h2 style="margin-bottom:4px;">找回密码</h2>
+        <p style="color:#888;margin-bottom:24px;font-size:13px;">通过安全问题重置密码</p>
+        <div class="card" style="text-align:left;">
+          <div id="forgotStep1">
+            <div class="form-group">
+              <label class="form-label">用户名</label>
+              <input class="form-input" id="forgotUsername" placeholder="请输入注册时的用户名">
+            </div>
+            <div id="forgotError" style="color:var(--red);font-size:13px;margin-bottom:8px;display:none;"></div>
+            <button class="btn btn-primary btn-block" onclick="App.forgotGetQuestion()">下一步</button>
+          </div>
+          <div id="forgotStep2" style="display:none;">
+            <div id="forgotQuestion" style="font-size:14px;font-weight:600;padding:10px;background:#f8f9ff;border-radius:6px;margin-bottom:10px;"></div>
+            <div class="form-group">
+              <label class="form-label">安全问题答案</label>
+              <input class="form-input" id="forgotSecurityAnswer" placeholder="请输入您的答案">
+            </div>
+            <div class="form-group">
+              <label class="form-label">新密码（至少6位）</label>
+              <input class="form-input" id="forgotNewPassword" type="password" placeholder="输入新密码">
+            </div>
+            <div class="form-group">
+              <label class="form-label">确认新密码</label>
+              <input class="form-input" id="forgotConfirmPassword" type="password" placeholder="再次输入新密码">
+            </div>
+            <div id="forgotError2" style="color:var(--red);font-size:13px;margin-bottom:8px;display:none;"></div>
+            <button class="btn btn-primary btn-block" onclick="App.forgotResetPassword()">重置密码</button>
+          </div>
+          <div style="text-align:center;margin-top:12px;font-size:13px;"><a href="#/login" style="color:#667eea;">返回登录</a></div>
+        </div>
+      </div>
+    `;
+  },
+
+  async forgotGetQuestion() {
+    const username = document.getElementById('forgotUsername').value.trim();
+    const err = document.getElementById('forgotError');
+    if (!username) { err.textContent = '请输入用户名'; err.style.display = 'block'; return; }
+    try {
+      const res = await API.getSecurityQuestion(username);
+      err.style.display = 'none';
+      document.getElementById('forgotStep1').style.display = 'none';
+      document.getElementById('forgotStep2').style.display = 'block';
+      document.getElementById('forgotQuestion').textContent = '❓ ' + res.question;
+    } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
+  },
+
+  async forgotResetPassword() {
+    const username = document.getElementById('forgotUsername').value.trim();
+    const answer = document.getElementById('forgotSecurityAnswer').value.trim();
+    const np = document.getElementById('forgotNewPassword').value;
+    const cp = document.getElementById('forgotConfirmPassword').value;
+    const err = document.getElementById('forgotError2');
+    if (!answer) { err.textContent = '请输入安全问题答案'; err.style.display = 'block'; return; }
+    if (np.length < 6) { err.textContent = '密码至少6位'; err.style.display = 'block'; return; }
+    if (np !== cp) { err.textContent = '两次密码不一致'; err.style.display = 'block'; return; }
+    try {
+      await API.resetPassword(username, answer, np);
+      alert('✅ 密码已重置成功，请用新密码登录！');
+      window.location.hash = '#/login';
     } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
   },
 
@@ -704,6 +795,7 @@ const App = {
           <button class="btn btn-primary btn-block" onclick="App.showEditProfile()">✏️ 编辑</button>
         </div>
         <div class="card">
+          <button class="btn btn-outline btn-block" onclick="App.showSecurityQuestion()">🔑 设置安全问题（找回密码用）</button>
           <button class="btn btn-outline btn-block" onclick="App.exportData()">📤 导出数据</button>
           <button class="btn btn-outline btn-block" style="margin-top:8px;" onclick="App.logout()">🚪 退出</button>
         </div>`;
@@ -743,6 +835,39 @@ const App = {
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `肝豆健康数据_${this.today()}.json`; a.click();
       alert('✅ 已导出');
     } catch(e) { alert('导出失败'); }
+  },
+
+  showSecurityQuestion() {
+    const d = document.createElement('div'); d.className = 'modal-overlay'; d.id = 'secQModal';
+    d.innerHTML = `<div class="modal-content"><div class="modal-title">🔑 设置安全问题</div>
+      <p style="font-size:13px;color:#888;margin-bottom:10px;">设置安全问题后，可用于找回密码</p>
+      <div class="form-group"><label class="form-label">安全问题</label>
+        <select class="form-select" id="sqQuestion">
+          <option value="您的出生地是？">您的出生地是？</option>
+          <option value="您母亲的姓名是？">您母亲的姓名是？</option>
+          <option value="您父亲的姓名是？">您父亲的姓名是？</option>
+          <option value="您的小学名称是？">您的小学名称是？</option>
+          <option value="您宠物的名字是？">您宠物的名字是？</option>
+          <option value="您最喜爱的城市是？">您最喜爱的城市是？</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">答案</label><input class="form-input" id="sqAnswer" placeholder="请牢记您的答案"></div>
+      <button class="btn btn-primary btn-block" onclick="App.saveSecurityQuestion()">保存</button>
+      <button class="btn btn-outline btn-block" style="margin-top:6px;" onclick="this.closest('.modal-overlay').remove()">取消</button>
+    </div>`;
+    d.onclick = function(e) { if (e.target === this) this.remove(); };
+    document.body.appendChild(d);
+  },
+
+  async saveSecurityQuestion() {
+    const q = document.getElementById('sqQuestion')?.value;
+    const a = document.getElementById('sqAnswer')?.value.trim();
+    if (!a) { alert('请输入答案'); return; }
+    try {
+      await API.setSecurityQuestion(q, a);
+      document.getElementById('secQModal')?.remove();
+      alert('✅ 安全问题设置成功！');
+    } catch(e) { alert('设置失败：' + e.message); }
   },
 
   showMoreMenu() {
