@@ -64,10 +64,13 @@ const App = {
     try {
       const result = route.render();
       if (result && result.then) {
-        result.then(html => { content.innerHTML = html; })
-              .catch(e => { content.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; });
+        result.then(html => {
+          content.innerHTML = html;
+          if (hash === '/tests') setTimeout(() => this.loadCharts(), 300);
+        }).catch(e => { content.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; });
       } else {
         content.innerHTML = result || '';
+        if (hash === '/tests') setTimeout(() => this.loadCharts(), 300);
       }
     } catch(e) {
       content.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
@@ -557,8 +560,7 @@ const App = {
         ${sorted.length > 0 ? `
         <div class="card"><div class="card-title">📈 24h尿铜趋势</div><div style="height:160px;"><canvas id="chart_uc"></canvas></div></div>
         <div class="card"><div class="card-title">📈 铜蓝蛋白趋势</div><div style="height:160px;"><canvas id="chart_cp"></canvas></div></div>
-        <div class="card"><div class="card-title">📈 ALT趋势</div><div style="height:160px;"><canvas id="chart_alt"></canvas></div></div>
-        <script>setTimeout(() => App.loadCharts(), 200);<\/script>` : ''}
+        <div class="card"><div class="card-title">📈 ALT趋势</div><div style="height:160px;"><canvas id="chart_alt"></canvas></div></div>` : ''}
       `;
     } catch(e) { return `<div class="alert alert-danger">${e.message}</div>`; }
   },
@@ -607,7 +609,14 @@ const App = {
         const canvas = document.getElementById(ch.id);
         if (!canvas) continue;
         const { data } = await API.getTestTrend(ch.key);
-        if (!data || data.length < 2) continue;
+        if (!data || data.length === 0) {
+          canvas.parentNode.innerHTML += '<div style="text-align:center;padding:20px;color:#888;font-size:13px;">暂无数据，请先录入检查结果</div>';
+          continue;
+        }
+        if (data.length === 1) {
+          canvas.parentNode.innerHTML += '<div style="text-align:center;padding:20px;color:#888;font-size:13px;">只有1次记录，录入更多数据后将显示趋势图</div>';
+          continue;
+        }
         new Chart(canvas, {
           type: 'line',
           data: { labels: data.map(d => d.date.slice(5)), datasets: [{ label: ch.label, data: data.map(d => d.value), borderColor: ch.color, tension: 0.3, fill: true, backgroundColor: ch.color + '22' }] },
