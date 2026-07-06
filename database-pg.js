@@ -390,11 +390,11 @@ async function exportAllData(userId) {
 function save() { /* PostgreSQL 自动持久化 */ }
 function load() { /* PostgreSQL 自动加载 */ }
 
-// 启动时自动初始化
+// 启动时自动初始化（不阻塞启动，不退出进程）
 if (process.env.DATABASE_URL) {
   init().catch(e => {
     console.error('❌ PostgreSQL 启动初始化失败:', e.message);
-    process.exit(1);
+    // 不退出进程，让健康检查路由可以返回错误信息
   });
 }
 
