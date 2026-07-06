@@ -473,7 +473,7 @@ app.get('/api/drugs/all', (req, res) => {
 });
 
 // ========== 启动 ==========
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // 健康检查端点（Railway 需要）
 app.get('/health', (req, res) => {
