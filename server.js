@@ -474,10 +474,20 @@ app.get('/api/drugs/all', (req, res) => {
 
 // ========== 启动 ==========
 const PORT = process.env.PORT || 3000;
+
+// 健康检查端点（Railway 需要）
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', port: PORT });
+});
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', port: PORT, db: process.env.DATABASE_URL ? 'postgresql' : 'json' });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`=================================`);
   console.log(`  肝豆健康管家系统已启动`);
   console.log(`  本地访问: http://localhost:${PORT}`);
   console.log(`  手机访问: http://<本机IP>:${PORT}`);
+  console.log(`  Health: http://localhost:${PORT}/health`);
   console.log(`=================================`);
 });
